@@ -8,6 +8,6 @@ namespace Turnos.core.interfaces
     public interface IAuthService
     {
         Task<AuthResponseDto> LoginAsync(LoginDto request);
-        Task<bool> RegisterAsync(IdentityUser usuario, string password, string role);
+        Task<IdentityResult> RegisterAsync(IdentityUser usuario, string password, string role);
     }
 }

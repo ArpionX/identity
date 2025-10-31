@@ -18,14 +18,38 @@ builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+//-------------INJECTION DEPENDENCY DE AUTHSERVICE----------------//
 builder.Services.AddScoped<IAuthService, AuthService>();
+
 
 //------------DB CONTEXT CONFIGURATION o CONEXION A BD----------------//
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 //------------IDENTITY CONFIGURATION----------------//
-builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
+{
+    // == reglas de contraseña 
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequiredLength = 6;
+
+    //== reglas de Usuario
+    options.User.RequireUniqueEmail = true;
+    //options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
+    //valor por defecto
+
+    // == reglas de bloqueo por si intentan hacer un ataque de fuerza bruta
+    /*options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5); // por defecto es 5 minutos
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.AllowedForNewUsers = true;*/ //estos valores estan por defecto
+
+    // == reglas de correo
+    //options.SignIn.RequireConfirmedEmail = false; valor por defecto es false
+    
+})
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 //------------CONFIGURACION JWT---------------------//

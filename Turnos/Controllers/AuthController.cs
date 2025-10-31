@@ -6,6 +6,9 @@ using System.Text;
 using System.Configuration;
 using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
+using Turnos.data.DTOs.Authentication;
+using Turnos.core.servicios;
+using Turnos.core.interfaces;
 
 namespace Turnos.Controllers
 {
@@ -14,26 +17,31 @@ namespace Turnos.Controllers
     public class AuthController : ControllerBase
     {
         private readonly UserManager<IdentityUser> _userManager;
-        private readonly SignInManager<IdentityUser> _signInManager;
+        private readonly IAuthService _authService;
         private readonly IConfiguration _configuration;
-        public AuthController(UserManager<IdentityUser> userManager, 
-            SignInManager<IdentityUser> signInManager, IConfiguration configuration)
+        private readonly RoleManager<IdentityRole> _roleManager;
+        public AuthController(UserManager<IdentityUser> userManager, IConfiguration configuration, 
+            IAuthService authService, RoleManager<IdentityRole> roleManager)
         {
             _userManager = userManager;
-            _signInManager = signInManager;
+            _authService = authService;
             _configuration = configuration;
+            _roleManager = roleManager;
         }
 
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto request)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var user = new IdentityUser
             {
                 UserName = request.UserName,
-                Email = request.Email,
+                Email = request.Email
             };
 
-            var result = await _userManager.CreateAsync(user, request.Password);
+            var result = await _authService.RegisterAsync(user, request.Password,request.Role);
 
             if (!result.Succeeded) return BadRequest(result.Errors);
 
@@ -43,50 +51,24 @@ namespace Turnos.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginDto request)
         {
-            //Verificar si el usuario existe
-            var user = await _userManager.FindByNameAsync(request.UserName);
-            if (user == null ) return Unauthorized("Usuario o contraseña incorrectos");
+            var result = await _authService.LoginAsync(request);
+            if (result == null)
+                return Unauthorized("Credenciales invalidas");
 
-            //Verificar la contraseña
-            var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, false);
-            if (!result.Succeeded) return Unauthorized("Usuario o contraseña incorrectos");
-
-            //Crear Jwt
-
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!);
-
-            var TokenDescription = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new[]
-                {
-                    new Claim(ClaimTypes.NameIdentifier, user.Id),
-                    new Claim(ClaimTypes.Name, user.UserName!)
-                }),
-                Expires = DateTime.UtcNow.AddHours(1),
-                Issuer = _configuration["Jwt:Issuer"],
-                Audience = _configuration["Jwt:Audience"],
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(TokenDescription);
-            var jwt = tokenHandler.WriteToken(token);
-
-            return Ok(new { Token = jwt });
+            return Ok(result);
         }
 
-        //DTO para el registro
-        public class RegisterDto
+        [HttpPost("create-role")]
+        public async Task<IActionResult> CreateRole(string roleName)
         {
-            public string Email { get; set; }
-            public string Password { get; set; }
-            public string UserName { get; set; }
+            if (string.IsNullOrWhiteSpace(roleName))
+                return BadRequest("El nombre del rol no puede estar vacío");
+            if (await _roleManager.RoleExistsAsync(roleName))
+                return BadRequest("El rol ya existe");
 
+            await _roleManager.CreateAsync(new IdentityRole(roleName));
+            return Ok($"Rol '{roleName}' creado correctamente");
         }
-        //DTO para el login
-        public class LoginDto
-        {
-            public string UserName { get; set; }
-            public string Password { get; set; }
-        }
+        
     }
 }
